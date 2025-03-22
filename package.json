@@ -1,0 +1,18 @@
+{
+  "name": "learn-prompting-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot for LearnPrompting community to teach prompt engineering",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "openai": "^4.28.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.3"
+  }
+} 
