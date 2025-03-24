@@ -51,7 +51,24 @@ const mongoSchema = {
             { key: { guild_id: 1, timestamp: -1 } },
             { key: { category: 1 } },
             { key: { timestamp: 1 }, expireAfterSeconds: 5 * 24 * 60 * 60 } // 5 days TTL
-        ]
+        ],
+        schema: {
+            guildId: { type: String, required: true },
+            title: { type: String, required: true },
+            description: { type: String, required: true },
+            tips: [String],
+            difficulty: { type: Number, required: true },
+            category: { type: String, required: true },
+            timestamp: { type: Date, default: Date.now },
+            solutions: [{
+                userId: String,
+                username: String,
+                solution: String,
+                modelResponse: String,
+                evaluation: String,
+                timestamp: { type: Date, default: Date.now }
+            }]
+        }
     },
     challenge_solutions: {
         indexes: [
@@ -73,8 +90,16 @@ async function initializeSchema() {
         const db = mongoClient.db();
         for (const [collection, schema] of Object.entries(mongoSchema)) {
             const coll = db.collection(collection);
+            
+            // Create indexes
             for (const index of schema.indexes) {
                 await coll.createIndex(index.key, index);
+            }
+
+            // If there's a schema definition, create a mongoose model
+            if (schema.schema) {
+                const mongoose = require('mongoose');
+                mongoose.model(collection, new mongoose.Schema(schema.schema));
             }
         }
         console.log('MongoDB schema initialized');

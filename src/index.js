@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const { initializeConnections } = require('./config/database');
 const { initializeSchema } = require('./database/schema');
+const mongoose = require('mongoose');
 
 // Initialize Discord client with required intents
 const client = new Client({
@@ -43,30 +44,45 @@ client.once('ready', async () => {
     console.log(`Logged in as ${client.user.tag}!`);
     
     try {
-        // Initialize database connections
+        // Initialize database connections - make sure this completes before proceeding
         await initializeConnections();
         
         // Initialize database schema
         await initializeSchema();
         
         console.log('Database system initialized successfully');
+        
+        // Initialize guildChallenges Map
+        client.guildChallenges = new Map();
+        
+        // Clean up old challenges every hour using MongoDB
+        setInterval(async () => {
+            try {
+                const Challenge = mongoose.model('challenge_history');
+                const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                
+                // Delete challenges older than 24 hours
+                await Challenge.deleteMany({
+                    timestamp: { $lt: oneDayAgo }
+                });
+                
+                // Update the cache
+                const activeChallenges = await Challenge.find({
+                    timestamp: { $gte: oneDayAgo }
+                });
+                
+                client.guildChallenges.clear();
+                activeChallenges.forEach(challenge => {
+                    client.guildChallenges.set(challenge.guildId, challenge);
+                });
+            } catch (error) {
+                console.error('Error cleaning up old challenges:', error);
+            }
+        }, 60 * 60 * 1000); // Check every hour
     } catch (error) {
         console.error('Failed to initialize database system:', error);
         process.exit(1);
     }
-    
-    // Initialize guildChallenges Map
-    client.guildChallenges = new Map();
-    
-    // Clean up old challenges every hour
-    setInterval(() => {
-        const now = Date.now();
-        for (const [guildId, challenge] of client.guildChallenges.entries()) {
-            if (now - challenge.timestamp > 24 * 60 * 60 * 1000) { // 24 hours
-                client.guildChallenges.delete(guildId);
-            }
-        }
-    }, 60 * 60 * 1000); // Check every hour
 });
 
 // Message handling
@@ -96,8 +112,14 @@ client.on('error', error => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('Shutting down gracefully...');
-    await client.destroy();
-    process.exit(0);
+    try {
+        await mongoose.connection.close();
+        await client.destroy();
+        process.exit(0);
+    } catch (error) {
+        console.error('Error during shutdown:', error);
+        process.exit(1);
+    }
 });
 
 // Login to Discord

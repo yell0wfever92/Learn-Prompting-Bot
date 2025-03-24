@@ -2,6 +2,7 @@ const { Pool } = require('pg');
 const { MongoClient } = require('mongodb');
 const Redis = require('ioredis');
 const { promisify } = require('util');
+const mongoose = require('mongoose');
 
 // PostgreSQL configuration
 const pgPool = new Pool({
@@ -78,7 +79,10 @@ async function initializeConnections() {
         pgClient.release();
 
         // Test MongoDB connection
-        await mongoClient.connect();
+        await mongoose.connect(process.env.MONGODB_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+        });
         console.log('MongoDB connected successfully');
 
         // Try to connect to Redis if available
@@ -157,6 +161,15 @@ async function checkRateLimit(userId, guildId, type) {
     }
 }
 
+// Add connection error handlers
+mongoose.connection.on('error', err => {
+    console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.log('MongoDB disconnected');
+});
+
 module.exports = {
     pgPool,
     mongoClient,
@@ -164,5 +177,6 @@ module.exports = {
     redisEnabled,
     initializeConnections,
     checkRateLimit,
-    DATA_RETENTION_PERIOD
+    DATA_RETENTION_PERIOD,
+    mongoConnection: mongoose.connection
 }; 
