@@ -1,7 +1,7 @@
 {
-  "name": "learn-prompting-bot",
+  "name": "hack-a-bot",
   "version": "1.0.0",
-  "description": "A Discord bot for LearnPrompting community to teach prompt engineering",
+  "description": "A Discord bot for the LearnPrompting.org community to teach prompt engineering and AI red teaming",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -9,10 +9,14 @@
   },
   "dependencies": {
     "discord.js": "^14.14.1",
+    "dotenv": "^16.4.1",
+    "ioredis": "^5.3.2",
+    "mongodb": "^6.3.0",
     "openai": "^4.28.0",
-    "dotenv": "^16.4.5"
+    "pg": "^8.11.3",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
   }
-} 
+}
