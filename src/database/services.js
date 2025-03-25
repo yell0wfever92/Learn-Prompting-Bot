@@ -1,36 +1,22 @@
-const { pgPool, mongoClient, redis, redisEnabled } = require('../config/database');
+const { pgPool, mongoClient } = require('../config/database');
 
-// Cache TTL in seconds
-const CACHE_TTL = 3600; // 1 hour
+// Cache operations now use in-memory storage
+const memoryCache = new Map();
 
-// Cache helper functions
-const cache = {
-    async get(key) {
-        if (!redisEnabled) return null;
-        try {
-            return await redis.get(key);
-        } catch (error) {
-            console.warn('Cache get error:', error);
-            return null;
-        }
-    },
-    async set(key, value, ttl = CACHE_TTL) {
-        if (!redisEnabled) return;
-        try {
-            await redis.setex(key, ttl, value);
-        } catch (error) {
-            console.warn('Cache set error:', error);
-        }
-    },
-    async del(key) {
-        if (!redisEnabled) return;
-        try {
-            await redis.del(key);
-        } catch (error) {
-            console.warn('Cache delete error:', error);
-        }
+async function getCacheValue(key) {
+    return memoryCache.get(key) || null;
+}
+
+async function setCacheValue(key, value, ttl) {
+    memoryCache.set(key, value);
+    if (ttl) {
+        setTimeout(() => memoryCache.delete(key), ttl * 1000);
     }
-};
+}
+
+async function deleteCacheValue(key) {
+    memoryCache.delete(key);
+}
 
 // Quiz Services
 const quizService = {
@@ -46,8 +32,8 @@ const quizService = {
         ]);
 
         // Invalidate relevant caches
-        await cache.del(`quiz:leaderboard:${guildId}`);
-        await cache.del(`quiz:user:${userId}:stats`);
+        await deleteCacheValue(`quiz:leaderboard:${guildId}`);
+        await deleteCacheValue(`quiz:user:${userId}:stats`);
 
         return result.rows[0].id;
     },
@@ -56,7 +42,7 @@ const quizService = {
         const cacheKey = `quiz:leaderboard:${guildId}:${page}:${limit}`;
         
         // Try to get from cache
-        const cached = await cache.get(cacheKey);
+        const cached = await getCacheValue(cacheKey);
         if (cached) return JSON.parse(cached);
 
         const offset = (page - 1) * limit;
@@ -76,7 +62,7 @@ const quizService = {
         const result = await pgPool.query(query, [guildId, limit, offset]);
 
         // Cache the result
-        await cache.set(cacheKey, JSON.stringify(result.rows));
+        await setCacheValue(cacheKey, JSON.stringify(result.rows));
 
         return result.rows;
     },
@@ -85,7 +71,7 @@ const quizService = {
         const cacheKey = `quiz:user:${userId}:stats`;
         
         // Try to get from cache
-        const cached = await cache.get(cacheKey);
+        const cached = await getCacheValue(cacheKey);
         if (cached) return JSON.parse(cached);
 
         const query = `
@@ -102,7 +88,7 @@ const quizService = {
         const result = await pgPool.query(query, [userId]);
 
         // Cache the result
-        await cache.set(cacheKey, JSON.stringify(result.rows));
+        await setCacheValue(cacheKey, JSON.stringify(result.rows));
 
         return result.rows;
     }
@@ -118,8 +104,8 @@ const challengeService = {
         });
 
         // Invalidate relevant caches
-        await cache.del(`challenge:active:${challenge.guild_id}`);
-        await cache.del(`challenge:user:${challenge.user_id}:recent`);
+        await deleteCacheValue(`challenge:active:${challenge.guild_id}`);
+        await deleteCacheValue(`challenge:user:${challenge.user_id}:recent`);
 
         return result.insertedId;
     },
@@ -132,7 +118,7 @@ const challengeService = {
         });
 
         // Invalidate relevant caches
-        await cache.del(`challenge:solutions:${solution.challenge_id}`);
+        await deleteCacheValue(`challenge:solutions:${solution.challenge_id}`);
 
         return result.insertedId;
     },
@@ -141,7 +127,7 @@ const challengeService = {
         const cacheKey = `challenge:active:${guildId}`;
         
         // Try to get from cache
-        const cached = await cache.get(cacheKey);
+        const cached = await getCacheValue(cacheKey);
         if (cached) return JSON.parse(cached);
 
         const db = mongoClient.db();
@@ -153,7 +139,7 @@ const challengeService = {
 
         if (challenge) {
             // Cache the result
-            await cache.set(cacheKey, JSON.stringify(challenge));
+            await setCacheValue(cacheKey, JSON.stringify(challenge));
         }
 
         return challenge;
@@ -163,7 +149,7 @@ const challengeService = {
         const cacheKey = `challenge:solutions:${challengeId}:${page}:${limit}`;
         
         // Try to get from cache
-        const cached = await cache.get(cacheKey);
+        const cached = await getCacheValue(cacheKey);
         if (cached) return JSON.parse(cached);
 
         const db = mongoClient.db();
@@ -175,7 +161,7 @@ const challengeService = {
             .toArray();
 
         // Cache the result
-        await cache.set(cacheKey, JSON.stringify(solutions));
+        await setCacheValue(cacheKey, JSON.stringify(solutions));
 
         return solutions;
     }
@@ -183,5 +169,8 @@ const challengeService = {
 
 module.exports = {
     quizService,
-    challengeService
+    challengeService,
+    getCacheValue,
+    setCacheValue,
+    deleteCacheValue
 }; 

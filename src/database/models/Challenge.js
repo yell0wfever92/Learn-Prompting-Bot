@@ -5,8 +5,8 @@ const challengeSchema = new mongoose.Schema({
     title: { type: String, required: true },
     description: { type: String, required: true },
     tips: [String],
-    difficulty: { type: Number, required: true },
     category: { type: String, required: true },
+    behavior: { type: Object, required: true },
     timestamp: { type: Date, default: Date.now },
     solutions: [{
         userId: String,

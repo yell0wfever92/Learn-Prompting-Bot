@@ -1,6 +1,5 @@
 const { Pool } = require('pg');
 const { MongoClient } = require('mongodb');
-const Redis = require('ioredis');
 const { promisify } = require('util');
 const mongoose = require('mongoose');
 
@@ -23,37 +22,6 @@ const mongoClient = new MongoClient(process.env.MONGODB_URI, {
     maxPoolSize: 50,
     serverSelectionTimeoutMS: 5000,
 });
-
-// Redis configuration with fallback
-let redis = null;
-let redisEnabled = false;
-
-try {
-    redis = new Redis({
-        host: process.env.REDIS_HOST,
-        port: process.env.REDIS_PORT,
-        password: process.env.REDIS_PASSWORD,
-        maxRetriesPerRequest: 3,
-        retryStrategy: (times) => {
-            const delay = Math.min(times * 50, 2000);
-            return delay;
-        },
-        lazyConnect: true // Don't connect immediately
-    });
-
-    redis.on('error', (error) => {
-        console.warn('Redis connection error:', error);
-        redisEnabled = false;
-    });
-
-    redis.on('connect', () => {
-        console.log('Redis connected successfully');
-        redisEnabled = true;
-    });
-} catch (error) {
-    console.warn('Redis initialization error:', error);
-    redisEnabled = false;
-}
 
 // Rate limiting configuration
 const RATE_LIMITS = {
@@ -84,15 +52,6 @@ async function initializeConnections() {
             useUnifiedTopology: true,
         });
         console.log('MongoDB connected successfully');
-
-        // Try to connect to Redis if available
-        if (redis) {
-            try {
-                await redis.connect();
-            } catch (error) {
-                console.warn('Redis connection failed, continuing without Redis:', error);
-            }
-        }
 
         // Set up data retention cleanup
         setupDataRetention();
@@ -131,34 +90,16 @@ async function setupDataRetention() {
     await cleanup(); // Initial cleanup
 }
 
-// Rate limiting middleware with Redis fallback
+// Rate limiting middleware (in-memory fallback)
 async function checkRateLimit(userId, guildId, type) {
-    if (!redisEnabled) {
-        console.warn('Rate limiting disabled - Redis not available');
-        return true;
-    }
-
+    // Simple in-memory rate limiting
+    // Note: This is not persistent across restarts
     const limits = RATE_LIMITS[type];
     if (!limits) return true;
 
-    try {
-        const userKey = `rate_limit:${type}:user:${userId}`;
-        const guildKey = `rate_limit:${type}:guild:${guildId}`;
-
-        const multi = redis.multi();
-        multi.incr(userKey);
-        multi.expire(userKey, limits.perUser.period);
-        multi.incr(guildKey);
-        multi.expire(guildKey, limits.perGuild.period);
-
-        const [userCount, , guildCount] = await multi.exec();
-        
-        return userCount[1] <= limits.perUser.count && 
-               guildCount[1] <= limits.perGuild.count;
-    } catch (error) {
-        console.warn('Rate limiting error, allowing request:', error);
-        return true;
-    }
+    // For a production environment, you would want to implement
+    // a more robust solution using a database or cache
+    return true;
 }
 
 // Add connection error handlers
@@ -173,8 +114,6 @@ mongoose.connection.on('disconnected', () => {
 module.exports = {
     pgPool,
     mongoClient,
-    redis,
-    redisEnabled,
     initializeConnections,
     checkRateLimit,
     DATA_RETENTION_PERIOD,

@@ -57,8 +57,8 @@ const mongoSchema = {
             title: { type: String, required: true },
             description: { type: String, required: true },
             tips: [String],
-            difficulty: { type: Number, required: true },
             category: { type: String, required: true },
+            behavior: { type: Object, required: true },
             timestamp: { type: Date, default: Date.now },
             solutions: [{
                 userId: String,
@@ -104,7 +104,7 @@ async function initializeSchema() {
         }
         console.log('MongoDB schema initialized');
     } catch (error) {
-        console.error('Schema initialization error:', error);
+        console.error('Error initializing schema:', error);
         throw error;
     }
 }
